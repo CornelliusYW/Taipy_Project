@@ -1,0 +1,30 @@
+
+[DATA_NODE.TRAINING_STOCK_DATA]
+storage_type = "csv"
+scope = "SCENARIO"
+
+[DATA_NODE.OUTPUT_MODEL]
+storage_type = "pickle"
+scope = "SCENARIO"
+
+[TASK.train_model]
+inputs = [ "TRAINING_STOCK_DATA:SECTION" ]
+outputs = [ "OUTPUT_MODEL:SECTION" ]
+function = ""
+skippable = "False:bool"
+
+[PIPELINE.Training_pipeline]
+tasks = [ "train_model:SECTION" ]
+
+[SCENARIO.Training_Scenario]
+pipelines = [ "Training_pipeline:SECTION" ]
+
+[DATA_NODE.RAW_DATA]
+storage_type = "pickle"
+scope = "SCENARIO"
+
+[TASK.Cleaning_Data]
+inputs = [ "RAW_DATA:SECTION" ]
+outputs = [ "TRAINING_STOCK_DATA:SECTION" ]
+function = ""
+skippable = "False:bool"
