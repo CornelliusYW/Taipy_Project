@@ -1,30 +1,45 @@
+[TAIPY]
 
-[DATA_NODE.TRAINING_STOCK_DATA]
+[DATA_NODE.initial_dataset]
 storage_type = "csv"
-scope = "SCENARIO"
+scope = "GLOBAL:SCOPE"
+path = "df_aapl.csv"
 
-[DATA_NODE.OUTPUT_MODEL]
+[DATA_NODE.cleaned_dataset]
+scope = "GLOBAL:SCOPE"
+
+[DATA_NODE.model_output]
 storage_type = "pickle"
-scope = "SCENARIO"
+scope = "GLOBAL:SCOPE"
 
-[TASK.train_model]
-inputs = [ "TRAINING_STOCK_DATA:SECTION" ]
-outputs = [ "OUTPUT_MODEL:SECTION" ]
-function = ""
+[TASK.clean_data_task]
+inputs = [ "initial_dataset:SECTION",]
+function = "create_mod_core.clean_data:function"
+outputs = [ "cleaned_dataset:SECTION",]
+skippable = "True:bool"
+
+[TASK.model_retraining_task]
+inputs = [ "cleaned_dataset:SECTION",]
+function = "create_mod_core.retrained_model:function"
+outputs = [ "model_output:SECTION",]
 skippable = "False:bool"
 
-[PIPELINE.Training_pipeline]
-tasks = [ "train_model:SECTION" ]
+[PIPELINE.model_retraining_pipeline]
+tasks = [
+  "clean_data_task:SECTION",
+  "model_retraining_task:SECTION",
+  "predict:SECTION"
+]
 
-[SCENARIO.Training_Scenario]
-pipelines = [ "Training_pipeline:SECTION" ]
-
-[DATA_NODE.RAW_DATA]
+[DATA_NODE.predictions]
 storage_type = "pickle"
-scope = "SCENARIO"
+scope = "SCENARIO:SCOPE"
 
-[TASK.Cleaning_Data]
-inputs = [ "RAW_DATA:SECTION" ]
-outputs = [ "TRAINING_STOCK_DATA:SECTION" ]
-function = ""
+[TASK.predict]
+inputs = [ "model_output:SECTION" ]
+outputs = [ "predictions:SECTION" ]
+function = "create_mod_core.predict:function"
 skippable = "False:bool"
+
+[SCENARIO.stock]
+pipelines = [ "model_retraining_pipeline:SECTION" ]
