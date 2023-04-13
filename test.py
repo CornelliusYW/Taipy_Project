@@ -35,7 +35,7 @@ stock_text = "No Stock to Show"
 chart_text = 'No Chart to Show'
 pred_text = 'No Prediction to Show'
 
-stock = None
+stock = ""
 stocks = []
 
 page = """
@@ -45,26 +45,24 @@ page = """
 ### Choose the stock to show
 
 <|layout|columns=1 1|
-<|{stock_text}|>
+<|{f'The stock is {stock.name}' if stock else 'No Stock to Show'}|>
 <|{stock}|selector|lov={stocks}|dropdown|adapter={lambda s: s.name}|>
 <|Reset|button|on_action=reset|>
-<|Press for Stock|button|on_action=update_ticker_history|>
-<|Update Model|button|on_action=update_model|>
+<|Press for Stock|button|on_action=update_ticker_history|active={stock}|>
+<|Update Model|button|on_action=update_model|active={stock}|>
 
 
-<|{chart_text}|>
+<|{f'Monthly history of stock {stock.name}' if stock else 'No Chart to Show'}|>
 <|{df}|chart|properties={property_chart}|>
 |>
 
-<|{pred_text}|>
+<|{f'1 Year Close Prediction of Stock {stock.name}' if stock else 'No Prediction to Show'}|>
 <|{df_pred}|chart|x=Date|y=Close_Prediction|>
 """
 
 def reset(state):
-    state.stock_text = "No Stock to Show"
-    state.chart_text = 'No Chart to Show'
+    state.stock = ""
     state.df = pd.DataFrame([], columns = ['Date', 'High', 'Low', 'Open', 'Close'])
-    state.pred_text = 'No Prediction to Show'
     state.df_pred = pd.DataFrame([], columns = ['Date','Close_Prediction'])
     notify(state, 'success', 'Reset done!')
 
@@ -76,11 +74,8 @@ def update_ticker_history(state):
     notify(state, 'success', 'History up-to-date! You should retrain the model')
 
 def on_change(state, var_name, var_value):
-    if var_name == "stock":
-        state.stock_text = f"The stock is {state.stock.name}"
-        state.chart_text = f"Monthly history of stock {state.stock.name}"
+    if var_name == "stock" and var_value:
         state.df = state.stock.initial_dataset.read()
-        state.pred_text = f'1 Year Close Prediction of Stock {state.stock.name}'
         state.df_pred = state.stock.predictions.read()      
 
 def update_model(state):
