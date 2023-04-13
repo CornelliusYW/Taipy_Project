@@ -9,9 +9,7 @@ Config.load('config_model_train.toml')
 scenario_cfg = Config.scenarios['stock']
 
 def get_stock_data(ticker, start):
-    end = dt.datetime.now()
-    ticker_data = yf.download(ticker, start, end)  # downloading the stock data from START to TODAY
-    ticker_data.reset_index(inplace=True)  # put date in the first column
+    ticker_data = yf.download(ticker, start, dt.datetime.now()).reset_index()  # downloading the stock data from START to TODAY
     ticker_data['Date'] = ticker_data['Date'].dt.tz_localize(None)
     return ticker_data
 
@@ -33,7 +31,6 @@ property_chart = {"type":"lines",
 df = pd.DataFrame([], columns = ['Date', 'High', 'Low', 'Open', 'Close'])
 df_pred = pd.DataFrame([], columns = ['Date','Close_Prediction'])
 
-
 stock_text = "No Stock to Show"
 chart_text = 'No Chart to Show'
 pred_text = 'No Prediction to Show'
@@ -42,10 +39,10 @@ stock = None
 stocks = []
 
 page = """
+<|toggle|theme|>
 # Stock Portfolio
 
 ### Choose the stock to show
-<|toggle|theme|>
 
 <|layout|columns=1 1|
 <|{stock_text}|>
@@ -88,10 +85,9 @@ def on_change(state, var_name, var_value):
 
 def update_model(state):
     print("Update Model Clicked")
-    if state.stock is not None:
-        tp.submit(state.stock)
-        on_change(state, "stock", state.stock)
-        notify(state, 'success', 'Model trained and charts up-to-date!')
+    tp.submit(state.stock)
+    on_change(state, "stock", state.stock)
+    notify(state, 'success', 'Model trained and charts up-to-date!')
 
 
 def on_init(state):
