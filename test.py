@@ -1,11 +1,19 @@
 from taipy.gui import Gui, notify
 import pandas as pd
 import yfinance as yf
-import pickle
-import prophet
+from taipy.config import Config
+import taipy as tp 
+import datetime as dt
 
-from create_mod_core import *
-tickers = yf.Tickers('msft aapl goog')
+Config.load('config_model_train.toml')
+scenario_cfg = Config.scenarios['stock']
+
+def get_stock_data(ticker, start):
+    ticker_data = yf.download(ticker, start, dt.datetime.now()).reset_index()  # downloading the stock data from START to TODAY
+    ticker_data['Date'] = ticker_data['Date'].dt.tz_localize(None)
+    return ticker_data
+
+start_date = '2015-01-01'
 
 property_chart = {"type":"lines",
                   "x":"Date",
@@ -19,89 +27,80 @@ property_chart = {"type":"lines",
                   "color[4]":"yellow"
                  }
 
-property_chart_pred = {
-    'type':'lines',
-    'x':'Date',
-    'y[1]': 'Close_Prediction'
-}
+
 df = pd.DataFrame([], columns = ['Date', 'High', 'Low', 'Open', 'Close'])
 df_pred = pd.DataFrame([], columns = ['Date','Close_Prediction'])
 
-model_list = {
-    'AAPL': 'aapl_model.pkl',
-    'MSFT': 'msft_model.pkl', 
-    'GOOG': 'goog_model.pkl'
-}
-
 stock_text = "No Stock to Show"
-stock = ""
 chart_text = 'No Chart to Show'
 pred_text = 'No Prediction to Show'
 
+stock = ""
+stocks = []
+
 page = """
+<|toggle|theme|>
 # Stock Portfolio
 
 ### Choose the stock to show
-<|toggle|theme|>
 
 <|layout|columns=1 1|
-<|
-<|{stock_text}|>
-
-<|{stock}|selector|lov=MSFT;AAPL;GOOG;Reset|dropdown|>
-
-<|Press for Stock|button|on_action=on_button_action|>
-|>
+<|{f'The stock is {stock.name}' if stock else 'No Stock to Show'}|>
+<|{stock}|selector|lov={stocks}|dropdown|adapter={lambda s: s.name}|>
+<|Reset|button|on_action=reset|>
+<|Press for Stock|button|on_action=update_ticker_history|active={stock}|>
+<|Update Model|button|on_action=update_model|active={stock}|>
 
 
-<|
-<|{chart_text}|>
+<|{f'Monthly history of stock {stock.name}' if stock else 'No Chart to Show'}|>
 <|{df}|chart|properties={property_chart}|>
 |>
 
-|>
-
-<|{pred_text}|>
-<|{df_pred}|chart|properties={property_chart_pred}|>
-
-<|Update Model|button|on_action=update_model|>
+<|{f'1 Year Close Prediction of Stock {stock.name}' if stock else 'No Prediction to Show'}|>
+<|{df_pred}|chart|x=Date|y=Close_Prediction|>
 """
 
-def on_button_action(state):
-    if state.stock == 'Reset':
-        state.stock_text = "No Stock to Show"
-        state.chart_text = 'No Chart to Show'
-        state.df = pd.DataFrame([], columns = ['Date', 'High', 'Low', 'Open', 'Close'])
-        state.pred_text = 'No Prediction to Show'
-    else:
-        state.stock_text = f"The stock is {state.stock}"
-        state.chart_text = f"Monthly history of stock {state.stock}"
-        state.df = tickers.tickers[state.stock].history().reset_index()
+def reset(state):
+    state.stock = ""
+    state.df = pd.DataFrame([], columns = ['Date', 'High', 'Low', 'Open', 'Close'])
+    state.df_pred = pd.DataFrame([], columns = ['Date','Close_Prediction'])
+    notify(state, 'success', 'Reset done!')
+
+
+
+def update_ticker_history(state):
+    state.stock.initial_dataset.write(get_stock_data(state.stock.name, start_date))
+    on_change(state, "stock", state.stock)
+    notify(state, 'success', 'History up-to-date! You should retrain the model')
 
 def on_change(state, var_name, var_value):
-    if var_name == "stock" and var_value == "Reset":
-        pass
-    else:
-        with open(model_list[state.stock], 'rb') as f:
-            state.pred_text = f'1 Year Close Prediction of Stock {state.stock}'
-            model = pickle.load(f)  
-            state.df_pred = model.predict(model.make_future_dataframe(periods=365))[['ds', 'yhat']].rename(columns = {'ds':'Date', 'yhat':'Close_Prediction'})
-
-        return        
+    if var_name == "stock" and var_value:
+        state.df = state.stock.initial_dataset.read()
+        state.df_pred = state.stock.predictions.read()      
 
 def update_model(state):
     print("Update Model Clicked")
-    pipeline = create_and_submit_pipeline()
-    notify(state, 'info', 'Model have finish training')
+    tp.submit(state.stock)
+    on_change(state, "stock", state.stock)
+    notify(state, 'success', 'Model trained and charts up-to-date!')
 
 
-def create_and_submit_pipeline():
-    print("Execution of pipeline...")
-    # Create the pipeline
-    retrain_pipeline = tp.create_pipeline(retraining_model_pipeline_cfg)
-    # Submit the pipeline (Execution)
-    tp.submit(retrain_pipeline)
-    return retrain_pipeline
+def on_init(state):
+    tickers = {'MSFT':get_stock_data('MSFT', start_date),
+               'AAPL':get_stock_data('AAPL', start_date),
+               'GOOG':get_stock_data('GOOG', start_date)}
+
+    def create_and_submit_scenario(stock_name):
+        scenario_stock = tp.create_scenario(scenario_cfg, name=stock_name)
+        scenario_stock.initial_dataset.path = f"{stock_name}.csv"
+        scenario_stock.initial_dataset.write(tickers[stock_name])
+        tp.submit(scenario_stock)
+
+    for stock_name in tickers.keys():
+        create_and_submit_scenario(stock_name)
+
+    state.stocks = tp.get_scenarios()
+    state.stock = state.stocks[0]
 
 tp.Core().run()
-Gui(page).run(use_reloader=True)
+Gui(page).run()
